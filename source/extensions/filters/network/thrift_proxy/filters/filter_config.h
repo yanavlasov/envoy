@@ -1,6 +1,5 @@
 #pragma once
 
-#include "envoy/factory/factory.h"
 #include "envoy/server/filter_config.h"
 
 #include "common/common/macros.h"
@@ -53,7 +52,7 @@ public:
    * created by this factory. Used for automatic registration with
    * FactoryCategoryRegistry.
    */
-  static std::string category() { return Factory::Categories::get().ThriftProxyFilters; }
+  static std::string category() { return "thrift_proxy.filters"; }
 };
 
 } // namespace ThriftFilters

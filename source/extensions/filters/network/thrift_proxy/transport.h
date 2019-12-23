@@ -4,7 +4,6 @@
 #include <string>
 
 #include "envoy/buffer/buffer.h"
-#include "envoy/factory/factory.h"
 #include "envoy/registry/registry.h"
 
 #include "common/common/assert.h"
@@ -104,7 +103,7 @@ public:
    * created by this factory. Used for automatic registration with
    * FactoryCategoryRegistry.
    */
-  static std::string category() { return Factory::Categories::get().ThriftProxyTransports; }
+  static std::string category() { return "thrift_proxy.transports"; }
 
   /**
    * Convenience method to lookup a factory by type.

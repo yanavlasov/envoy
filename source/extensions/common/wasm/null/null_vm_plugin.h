@@ -1,7 +1,5 @@
 #pragma once
 
-#include "envoy/factory/factory.h"
-
 #include "extensions/common/wasm/wasm_vm.h"
 
 namespace Envoy {
@@ -42,7 +40,7 @@ public:
    * created by this factory. Used for automatic registration with
    * FactoryCategoryRegistry.
    */
-  static std::string category() { return Factory::Categories::get().WasmNullVm; }
+  static std::string category() { return "wasm.null_vms"; }
 
   /**
    * Create an instance of the plugin.

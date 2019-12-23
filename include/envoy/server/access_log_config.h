@@ -3,7 +3,6 @@
 #include <string>
 
 #include "envoy/access_log/access_log.h"
-#include "envoy/factory/factory.h"
 #include "envoy/server/filter_config.h"
 
 #include "common/protobuf/protobuf.h"
@@ -51,7 +50,7 @@ public:
    * created by this factory. Used for automatic registration with
    * FactoryCategoryRegistry.
    */
-  static std::string category() { return Factory::Categories::get().AccessLoggers; }
+  static std::string category() { return "access_loggers"; }
 };
 
 } // namespace Configuration

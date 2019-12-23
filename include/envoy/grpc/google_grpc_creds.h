@@ -5,7 +5,6 @@
 #include "envoy/api/api.h"
 #include "envoy/api/v2/core/grpc_service.pb.h"
 #include "envoy/common/pure.h"
-#include "envoy/factory/factory.h"
 
 #include "grpcpp/grpcpp.h"
 
@@ -46,7 +45,7 @@ public:
    * created by this factory. Used for automatic registration with
    * FactoryCategoryRegistry.
    */
-  static std::string category() { return Factory::Categories::get().GrpcCredentials; }
+  static std::string category() { return "grpc_credentials"; }
 };
 
 } // namespace Grpc

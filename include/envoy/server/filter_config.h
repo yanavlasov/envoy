@@ -4,7 +4,6 @@
 
 #include "envoy/access_log/access_log.h"
 #include "envoy/api/v2/core/base.pb.h"
-#include "envoy/factory/factory.h"
 #include "envoy/grpc/context.h"
 #include "envoy/http/codes.h"
 #include "envoy/http/context.h"
@@ -255,7 +254,7 @@ public:
    * created by this factory. Used for automatic registration with
    * FactoryCategoryRegistry.
    */
-  static std::string category() { return Factory::Categories::get().FiltersListener; }
+  static std::string category() { return "filters.listener"; }
 };
 
 /**
@@ -283,7 +282,7 @@ public:
    * created by this factory. Used for automatic registration with
    * FactoryCategoryRegistry.
    */
-  static std::string category() { return Factory::Categories::get().FiltersUdpListener; }
+  static std::string category() { return "filters.udp_listener"; }
 };
 
 /**
@@ -354,7 +353,7 @@ public:
    * created by this factory. Used for automatic registration with
    * FactoryCategoryRegistry.
    */
-  static std::string category() { return Factory::Categories::get().FiltersNetwork; }
+  static std::string category() { return "filters.network"; }
 
   /**
    * @return bool true if this filter must be the last filter in a filter chain, false otherwise.
@@ -394,7 +393,7 @@ public:
    * created by this factory. Used for automatic registration with
    * FactoryCategoryRegistry.
    */
-  static std::string category() { return Factory::Categories::get().FiltersUpstreamNetwork; }
+  static std::string category() { return "filters.upstream_network"; }
 };
 
 /**
@@ -458,7 +457,7 @@ public:
    * created by this factory. Used for automatic registration with
    * FactoryCategoryRegistry.
    */
-  static std::string category() { return Factory::Categories::get().FiltersHttp; }
+  static std::string category() { return "filters.http"; }
 
   /**
    * @return bool true if this filter must be the last filter in a filter chain, false otherwise.

@@ -4,7 +4,6 @@
 #include <string>
 
 #include "envoy/config/filter/network/dubbo_proxy/v2alpha1/route.pb.h"
-#include "envoy/factory/factory.h"
 #include "envoy/router/router.h"
 #include "envoy/server/filter_config.h"
 
@@ -90,7 +89,7 @@ public:
    * created by this factory. Used for automatic registration with
    * FactoryCategoryRegistry.
    */
-  static std::string category() { return Factory::Categories::get().DubboProxyRouteMatchers; }
+  static std::string category() { return "dubbo_proxy.route_matchers"; }
 
   /**
    * Convenience method to lookup a factory by type.

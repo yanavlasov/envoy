@@ -7,7 +7,6 @@
 
 #include "envoy/api/v2/core/address.pb.h"
 #include "envoy/common/pure.h"
-#include "envoy/factory/factory.h"
 #include "envoy/network/address.h"
 
 namespace Envoy {
@@ -40,7 +39,7 @@ public:
    * created by this factory. Used for automatic registration with
    * FactoryCategoryRegistry.
    */
-  static std::string category() { return Factory::Categories::get().Resolvers; }
+  static std::string category() { return "resolvers"; }
 };
 
 } // namespace Address

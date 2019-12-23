@@ -1,6 +1,5 @@
 #pragma once
 
-#include "envoy/factory/factory.h"
 #include "envoy/network/connection_handler.h"
 
 #include "common/protobuf/protobuf.h"
@@ -34,7 +33,7 @@ public:
    * created by this factory. Used for automatic registration with
    * FactoryCategoryRegistry.
    */
-  static std::string category() { return Factory::Categories::get().UdpListeners; }
+  static std::string category() { return "udp_listeners"; }
 };
 
 } // namespace Server

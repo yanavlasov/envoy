@@ -2,7 +2,6 @@
 
 #include <string>
 
-#include "envoy/factory/factory.h"
 #include "envoy/http/codec.h"
 #include "envoy/network/connection.h"
 
@@ -19,7 +18,7 @@ public:
   virtual std::unique_ptr<ServerConnection>
   createQuicServerConnection(Network::Connection& connection, ConnectionCallbacks& callbacks) PURE;
 
-  static std::string category() { return Factory::Categories::get().QuicClientCodec; }
+  static std::string category() { return "quic_client_codec"; }
 };
 
 // A factory to create Http::ClientConnection instance for QUIC.
@@ -32,7 +31,7 @@ public:
   virtual std::unique_ptr<ClientConnection>
   createQuicClientConnection(Network::Connection& connection, ConnectionCallbacks& callbacks) PURE;
 
-  static std::string category() { return Factory::Categories::get().QuicServerCodec; }
+  static std::string category() { return "quic_server_codec"; }
 };
 
 } // namespace Http

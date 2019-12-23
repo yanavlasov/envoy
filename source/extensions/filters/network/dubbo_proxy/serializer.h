@@ -4,7 +4,6 @@
 #include <unordered_map>
 
 #include "envoy/buffer/buffer.h"
-#include "envoy/factory/factory.h"
 
 #include "common/common/assert.h"
 #include "common/config/utility.h"
@@ -100,7 +99,7 @@ public:
    * created by this factory. Used for automatic registration with
    * FactoryCategoryRegistry.
    */
-  static std::string category() { return Factory::Categories::get().DubboProxySerializers; }
+  static std::string category() { return "dubbo_proxy.serializers"; }
 
   /**
    * Convenience method to lookup a factory by type.

@@ -11,7 +11,6 @@
 
 #include "envoy/config/bootstrap/v2/bootstrap.pb.h"
 #include "envoy/config/trace/v2/trace.pb.h"
-#include "envoy/factory/factory.h"
 #include "envoy/http/filter.h"
 #include "envoy/network/filter.h"
 #include "envoy/server/configuration.h"
@@ -62,7 +61,7 @@ public:
    * created by this factory. Used for automatic registration with
    * FactoryCategoryRegistry.
    */
-  static std::string category() { return Factory::Categories::get().StatsSinks; }
+  static std::string category() { return "stats_sinks"; }
 };
 
 /**
