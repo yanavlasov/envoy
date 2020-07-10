@@ -131,6 +131,9 @@ envoy_cc_library(
     name = "grpc_mux_lib",
     srcs = ["grpc_mux_impl.cc"],
     hdrs = ["grpc_mux_impl.h"],
+    external_deps = [
+        "abseil_btree",
+    ],
     deps = [
         ":api_version_lib",
         ":decoded_resource_lib",
@@ -144,7 +147,6 @@ envoy_cc_library(
         "//source/common/common:utility_lib",
         "//source/common/memory:utils_lib",
         "//source/common/protobuf",
-        "@com_google_absl//absl/container:btree",
         "@envoy_api//envoy/api/v2:pkg_cc_proto",
         "@envoy_api//envoy/service/discovery/v3:pkg_cc_proto",
     ],
