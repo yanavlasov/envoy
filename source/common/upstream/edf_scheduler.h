@@ -2,6 +2,7 @@
 #include <cstdint>
 #include <iostream>
 #include <queue>
+#include <random>
 
 #include "common/common/assert.h"
 
@@ -25,6 +26,8 @@ namespace Upstream {
 // weights and an O(log n) pick time.
 template <class C> class EdfScheduler {
 public:
+  EdfScheduler() = default;
+  EdfScheduler(double start_time) : current_time_(start_time) {}
   // Each time peekAgain is called, it will return the best-effort subsequent
   // pick, popping and reinserting the entry as if it had been picked, and
   // inserting it into the pre-picked queue.
@@ -81,6 +84,17 @@ public:
     queue_.push({deadline, order_offset_++, entry});
     ASSERT(queue_.top().deadline_ >= current_time_);
   }
+
+  void addInitial(double weight, std::shared_ptr<C> entry) {
+    ASSERT(weight > 0);
+    const double time_increment = 1.0 / weight;
+    const double deadline = time_increment < current_time_ ? current_time_ + time_increment : time_increment;
+    EDF_TRACE("Insertion {} in queue with deadline {} and weight {}.",
+              static_cast<const void*>(entry.get()), deadline, weight);
+    queue_.push({deadline, order_offset_++, entry});
+    ASSERT(queue_.top().deadline_ >= current_time_);
+  }
+
 
   /**
    * Implements empty() on the internal queue. Does not attempt to discard expired elements.

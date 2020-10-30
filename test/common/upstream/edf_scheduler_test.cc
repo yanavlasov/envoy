@@ -1,10 +1,35 @@
 #include "common/upstream/edf_scheduler.h"
 
+#include <random>
+
 #include "gtest/gtest.h"
 
 namespace Envoy {
 namespace Upstream {
 namespace {
+
+TEST(EdfSchedulerTest, Seed) {
+  std::random_device rd;
+  std::mt19937 gen(rd());
+  std::uniform_real_distribution<> dis(0, 1.0);
+
+  auto entry_99 = std::make_shared<uint32_t>(99);
+  auto entry_1 = std::make_shared<uint32_t>(1);
+  uint32_t count_99 = 0;
+  uint32_t count_1 = 0;
+  for (int i=0; i < 1000000; ++i) {
+    EdfScheduler<uint32_t> sched(dis(gen));
+    sched.addInitial(99., entry_99);
+    sched.addInitial(1., entry_1);
+    auto initial_pick = sched.pickAndAdd([](uint32_t weight) {return weight == 1 ? 1. : 99.;} );
+    if (*initial_pick == 99) {
+      ++count_99;
+    } else {
+      ++count_1;
+    }
+  }
+  printf("%u, %u\n", count_99, count_1);
+}
 
 TEST(EdfSchedulerTest, Empty) {
   EdfScheduler<uint32_t> sched;
