@@ -312,6 +312,7 @@ public:
           }
 
           hcm.mutable_normalize_path()->set_value(normalize_path_);
+          hcm.set_path_with_escaped_slashes_action(path_with_escaped_slashes_action_);
 
           if (append) {
             // The config specifies append by default: no modifications needed.
@@ -432,6 +433,10 @@ protected:
 
   bool use_eds_{false};
   bool normalize_path_{false};
+  envoy::config::filter::network::http_connection_manager::v2::HttpConnectionManager::
+      PathWithEscapedSlashesAction path_with_escaped_slashes_action_{
+          envoy::config::filter::network::http_connection_manager::v2::HttpConnectionManager::
+              KEEP_UNCHANGED};
   FakeHttpConnectionPtr eds_connection_;
   FakeStreamPtr eds_stream_;
 };
@@ -1066,5 +1071,163 @@ TEST_P(HeaderIntegrationTest, TestPathAndRouteOnNormalizedPath) {
           {"x-unmodified", "response"},
           {":status", "200"},
       });
+}
+
+// Validates that Envoy by default does not modify escaped slashes.
+TEST_P(HeaderIntegrationTest, PathWithEscapedSlashesByDefaultUnchanghed) {
+  path_with_escaped_slashes_action_ = envoy::config::filter::network::http_connection_manager::v2::
+      HttpConnectionManager::IMPLEMENTATION_SPECIFIC_DEFAULT;
+  normalize_path_ = true;
+  initializeFilter(HeaderMode::Append, false);
+  performRequest(
+      Http::TestHeaderMapImpl{
+          {":method", "GET"},
+          {":path", "/private/..%2Fpublic%5c"},
+          {":scheme", "http"},
+          {":authority", "path-sanitization.com"},
+      },
+      Http::TestHeaderMapImpl{{":authority", "path-sanitization.com"},
+                              {":path", "/private/..%2Fpublic%5c"},
+                              {":method", "GET"},
+                              {"x-site", "private"}},
+      Http::TestHeaderMapImpl{
+          {"server", "envoy"},
+          {"content-length", "0"},
+          {":status", "200"},
+          {"x-unmodified", "response"},
+      },
+      Http::TestHeaderMapImpl{
+          {"server", "envoy"},
+          {"x-unmodified", "response"},
+          {":status", "200"},
+      });
+}
+
+// Validates that default action can be overridden through runtime.
+TEST_P(HeaderIntegrationTest, PathWithEscapedSlashesDefaultOverriden) {
+  // Override the default action to REJECT
+  config_helper_.addRuntimeOverride("http_connection_manager.path_with_escaped_slashes_action",
+                                    "2");
+  path_with_escaped_slashes_action_ = envoy::config::filter::network::http_connection_manager::v2::
+      HttpConnectionManager::IMPLEMENTATION_SPECIFIC_DEFAULT;
+  initializeFilter(HeaderMode::Append, false);
+  registerTestServerPorts({"http"});
+  codec_client_ = makeHttpConnection(makeClientConnection(lookupPort("http")));
+  IntegrationStreamDecoderPtr response =
+      codec_client_->makeHeaderOnlyRequest(Http::TestHeaderMapImpl{
+          {":method", "GET"},
+          {":path", "/private%2f../public"},
+          {":scheme", "http"},
+          {":authority", "path-sanitization.com"},
+      });
+  response->waitForEndStream();
+  Http::TestHeaderMapImpl expected_headers{
+      {"server", "envoy"},
+      {":status", "400"},
+  };
+  compareHeaders(response->headers(), expected_headers);
+}
+
+TEST_P(HeaderIntegrationTest, PathWithEscapedSlashesRejected) {
+  path_with_escaped_slashes_action_ = envoy::config::filter::network::http_connection_manager::v2::
+      HttpConnectionManager::REJECT_REQUEST;
+  initializeFilter(HeaderMode::Append, false);
+  registerTestServerPorts({"http"});
+  codec_client_ = makeHttpConnection(makeClientConnection(lookupPort("http")));
+  IntegrationStreamDecoderPtr response =
+      codec_client_->makeHeaderOnlyRequest(Http::TestHeaderMapImpl{
+          {":method", "GET"},
+          {":path", "/private%2f../public"},
+          {":scheme", "http"},
+          {":authority", "path-sanitization.com"},
+      });
+  response->waitForEndStream();
+  Http::TestHeaderMapImpl expected_headers{
+      {"server", "envoy"},
+      {":status", "400"},
+  };
+  compareHeaders(response->headers(), expected_headers);
+}
+
+// Validates that Envoy does not modify escaped slashes when configured.
+TEST_P(HeaderIntegrationTest, PathWithEscapedSlashesUnmodified) {
+  path_with_escaped_slashes_action_ = envoy::config::filter::network::http_connection_manager::v2::
+      HttpConnectionManager::KEEP_UNCHANGED;
+  normalize_path_ = true;
+  initializeFilter(HeaderMode::Append, false);
+  performRequest(
+      Http::TestHeaderMapImpl{
+          {":method", "GET"},
+          {":path", "/private/..%2Fpublic%5c"},
+          {":scheme", "http"},
+          {":authority", "path-sanitization.com"},
+      },
+      Http::TestHeaderMapImpl{{":authority", "path-sanitization.com"},
+                              {":path", "/private/..%2Fpublic%5c"},
+                              {":method", "GET"},
+                              {"x-site", "private"}},
+      Http::TestHeaderMapImpl{
+          {"server", "envoy"},
+          {"content-length", "0"},
+          {":status", "200"},
+          {"x-unmodified", "response"},
+      },
+      Http::TestHeaderMapImpl{
+          {"server", "envoy"},
+          {"x-unmodified", "response"},
+          {":status", "200"},
+      });
+}
+
+// Validates that Envoy forwards unescaped slashes when configured.
+TEST_P(HeaderIntegrationTest, PathWithEscapedSlashesAndNormalizationForwarded) {
+  path_with_escaped_slashes_action_ = envoy::config::filter::network::http_connection_manager::v2::
+      HttpConnectionManager::UNESCAPE_AND_FORWARD;
+  normalize_path_ = true;
+  initializeFilter(HeaderMode::Append, false);
+  performRequest(
+      Http::TestHeaderMapImpl{
+          {":method", "GET"},
+          {":path", "/private/..%2Fpublic%5c%2e%2Fabc"},
+          {":scheme", "http"},
+          {":authority", "path-sanitization.com"},
+      },
+      Http::TestHeaderMapImpl{{":authority", "path-sanitization.com"},
+                              {":path", "/public/abc"},
+                              {":method", "GET"},
+                              {"x-site", "public"}},
+      Http::TestHeaderMapImpl{
+          {"server", "envoy"},
+          {"content-length", "0"},
+          {":status", "200"},
+          {"x-unmodified", "response"},
+      },
+      Http::TestHeaderMapImpl{
+          {"server", "envoy"},
+          {"x-unmodified", "response"},
+          {":status", "200"},
+      });
+}
+
+TEST_P(HeaderIntegrationTest, PathWithEscapedSlashesRedirected) {
+  path_with_escaped_slashes_action_ = envoy::config::filter::network::http_connection_manager::v2::
+      HttpConnectionManager::UNESCAPE_AND_REDIRECT;
+  initializeFilter(HeaderMode::Append, false);
+  registerTestServerPorts({"http"});
+  codec_client_ = makeHttpConnection(makeClientConnection(lookupPort("http")));
+  IntegrationStreamDecoderPtr response =
+      codec_client_->makeHeaderOnlyRequest(Http::TestHeaderMapImpl{
+          {":method", "GET"},
+          {":path", "/private%2f../%2e%5Cpublic"},
+          {":scheme", "http"},
+          {":authority", "path-sanitization.com"},
+      });
+  response->waitForEndStream();
+  Http::TestHeaderMapImpl expected_headers{
+      {"location", "/private/../%2e\\public"},
+      {"server", "envoy"},
+      {":status", "307"},
+  };
+  compareHeaders(response->headers(), expected_headers);
 }
 } // namespace Envoy

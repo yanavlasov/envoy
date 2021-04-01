@@ -158,6 +158,12 @@ public:
   headersWithUnderscoresAction() const override {
     return envoy::api::v2::core::HttpProtocolOptions::ALLOW;
   }
+  envoy::config::filter::network::http_connection_manager::v2::HttpConnectionManager::
+      PathWithEscapedSlashesAction
+      pathWithEscapedSlashesAction() const override {
+    return envoy::config::filter::network::http_connection_manager::v2::HttpConnectionManager::
+        KEEP_UNCHANGED;
+  }
   Http::Code request(absl::string_view path_and_query, absl::string_view method,
                      Http::HeaderMap& response_headers, std::string& body) override;
   void closeSocket();

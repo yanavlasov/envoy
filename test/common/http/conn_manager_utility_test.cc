@@ -93,6 +93,9 @@ public:
   MOCK_CONST_METHOD0(shouldMergeSlashes, bool());
   MOCK_CONST_METHOD0(headersWithUnderscoresAction,
                      envoy::api::v2::core::HttpProtocolOptions::HeadersWithUnderscoresAction());
+  MOCK_METHOD(envoy::config::filter::network::http_connection_manager::v2::HttpConnectionManager::
+                  PathWithEscapedSlashesAction,
+              pathWithEscapedSlashesAction, (), (const));
 
   std::unique_ptr<Http::InternalAddressConfig> internal_address_config_ =
       std::make_unique<DefaultInternalAddressConfig>();
@@ -113,6 +116,9 @@ public:
     ON_CALL(config_, tracingConfig()).WillByDefault(Return(&tracing_config_));
 
     ON_CALL(config_, via()).WillByDefault(ReturnRef(via_));
+    ON_CALL(config_, pathWithEscapedSlashesAction())
+        .WillByDefault(Return(envoy::config::filter::network::http_connection_manager::v2::
+                                  HttpConnectionManager::KEEP_UNCHANGED));
   }
 
   struct MutateRequestRet {
@@ -1253,6 +1259,17 @@ TEST_F(ConnectionManagerUtilityTest, RemovesProxyResponseHeaders) {
   EXPECT_FALSE(response_headers.has("proxy-connection"));
 }
 
+// maybeNormalizePath() returns true with an empty path.
+TEST_F(ConnectionManagerUtilityTest, SanitizeEmptyPath) {
+  ON_CALL(config_, shouldNormalizePath()).WillByDefault(Return(false));
+  HeaderMapImpl original_headers;
+
+  HeaderMapImpl header_map;
+  EXPECT_EQ(ConnectionManagerUtility::NormalizePathAction::Continue,
+            ConnectionManagerUtility::maybeNormalizePath(header_map, config_));
+  EXPECT_EQ(original_headers, header_map);
+}
+
 // maybeNormalizePath() does nothing by default.
 TEST_F(ConnectionManagerUtilityTest, SanitizePathDefaultOff) {
   ON_CALL(config_, shouldNormalizePath()).WillByDefault(Return(false));
@@ -1320,6 +1337,177 @@ TEST_F(ConnectionManagerUtilityTest, MergeSlashesWithoutNormalization) {
   HeaderMapImpl header_map(static_cast<HeaderMap&>(original_headers));
   ConnectionManagerUtility::maybeNormalizePath(header_map, config_);
   EXPECT_EQ(header_map.Path()->value().getStringView(), "/xyz/../abc");
+}
+
+// maybeNormalizePath() does not touch escaped slashes when configured to KEEP_UNCHANGED.
+TEST_F(ConnectionManagerUtilityTest, KeepEscapedSlashesWhenConfigured) {
+  ON_CALL(config_, pathWithEscapedSlashesAction())
+      .WillByDefault(Return(envoy::config::filter::network::http_connection_manager::v2::
+                                HttpConnectionManager::KEEP_UNCHANGED));
+  HeaderMapImpl original_headers;
+  original_headers.insertPath().value(std::string("/xyz%2fabc%5Cqrt"));
+
+  HeaderMapImpl header_map(static_cast<HeaderMap&>(original_headers));
+  EXPECT_EQ(ConnectionManagerUtility::NormalizePathAction::Continue,
+            ConnectionManagerUtility::maybeNormalizePath(header_map, config_));
+  EXPECT_EQ(header_map.Path()->value().getStringView(), "/xyz%2fabc%5Cqrt");
+}
+
+// maybeNormalizePath() returns REJECT if %2F or %5C was detected and configured to REJECT.
+TEST_F(ConnectionManagerUtilityTest, RejectIfEscapedSlashesPresentAndConfiguredToReject) {
+  ON_CALL(config_, pathWithEscapedSlashesAction())
+      .WillByDefault(Return(envoy::config::filter::network::http_connection_manager::v2::
+                                HttpConnectionManager::REJECT_REQUEST));
+  HeaderMapImpl original_headers;
+  original_headers.insertPath().value(std::string("/xyz%2F..//abc"));
+
+  HeaderMapImpl header_map(static_cast<HeaderMap&>(original_headers));
+  EXPECT_EQ(ConnectionManagerUtility::NormalizePathAction::Reject,
+            ConnectionManagerUtility::maybeNormalizePath(header_map, config_));
+
+  original_headers.insertPath().value(std::string("/xyz%5c..//abc"));
+  HeaderMapImpl header_map2(static_cast<HeaderMap&>(original_headers));
+  EXPECT_EQ(ConnectionManagerUtility::NormalizePathAction::Reject,
+            ConnectionManagerUtility::maybeNormalizePath(header_map2, config_));
+}
+
+// maybeNormalizePath() returns CONTINUE if escaped slashes were NOT present and configured to
+// REJECT.
+TEST_F(ConnectionManagerUtilityTest, RejectIfEscapedSlashesNotPresentAndConfiguredToReject) {
+  ON_CALL(config_, pathWithEscapedSlashesAction())
+      .WillByDefault(Return(envoy::config::filter::network::http_connection_manager::v2::
+                                HttpConnectionManager::REJECT_REQUEST));
+  HeaderMapImpl original_headers;
+  original_headers.insertPath().value(std::string("/xyz%EA/abc"));
+
+  HeaderMapImpl header_map(static_cast<HeaderMap&>(original_headers));
+  EXPECT_EQ(ConnectionManagerUtility::NormalizePathAction::Continue,
+            ConnectionManagerUtility::maybeNormalizePath(header_map, config_));
+  EXPECT_EQ(header_map.Path()->value().getStringView(), "/xyz%EA/abc");
+}
+
+// maybeNormalizePath() returns REDIRECT if escaped slashes were detected and configured to
+// REDIRECT.
+TEST_F(ConnectionManagerUtilityTest, RedirectIfEscapedSlashesPresentAndConfiguredToRedirect) {
+  ON_CALL(config_, pathWithEscapedSlashesAction())
+      .WillByDefault(Return(envoy::config::filter::network::http_connection_manager::v2::
+                                HttpConnectionManager::UNESCAPE_AND_REDIRECT));
+  HeaderMapImpl original_headers;
+  original_headers.insertPath().value(std::string("/xyz%2F../%5cabc"));
+
+  HeaderMapImpl header_map(static_cast<HeaderMap&>(original_headers));
+  EXPECT_EQ(ConnectionManagerUtility::NormalizePathAction::Redirect,
+            ConnectionManagerUtility::maybeNormalizePath(header_map, config_));
+  EXPECT_EQ(header_map.Path()->value().getStringView(), "/xyz/../\\abc");
+}
+
+// maybeNormalizePath() returns CONTINUE if escaped slashes were NOT present and configured to
+// REDIRECT.
+TEST_F(ConnectionManagerUtilityTest, ContinueIfEscapedSlashesNotFoundAndConfiguredToRedirect) {
+  ON_CALL(config_, pathWithEscapedSlashesAction())
+      .WillByDefault(Return(envoy::config::filter::network::http_connection_manager::v2::
+                                HttpConnectionManager::UNESCAPE_AND_REDIRECT));
+  HeaderMapImpl original_headers;
+  original_headers.insertPath().value(std::string("/xyz%30..//abc"));
+
+  HeaderMapImpl header_map(static_cast<HeaderMap&>(original_headers));
+  EXPECT_EQ(ConnectionManagerUtility::NormalizePathAction::Continue,
+            ConnectionManagerUtility::maybeNormalizePath(header_map, config_));
+  EXPECT_EQ(header_map.Path()->value().getStringView(), "/xyz%30..//abc");
+}
+
+// maybeNormalizePath() returns CONTINUE if escaped slashes were detected and configured to
+// UNESCAPE_AND_FORWARD.
+TEST_F(ConnectionManagerUtilityTest, ContinueIfEscapedSlashesPresentAndConfiguredToUnescape) {
+  ON_CALL(config_, pathWithEscapedSlashesAction())
+      .WillByDefault(Return(envoy::config::filter::network::http_connection_manager::v2::
+                                HttpConnectionManager::UNESCAPE_AND_FORWARD));
+  HeaderMapImpl original_headers;
+  original_headers.insertPath().value(std::string("/xyz%2F../%5Cabc"));
+
+  HeaderMapImpl header_map(static_cast<HeaderMap&>(original_headers));
+  EXPECT_EQ(ConnectionManagerUtility::NormalizePathAction::Continue,
+            ConnectionManagerUtility::maybeNormalizePath(header_map, config_));
+  EXPECT_EQ(header_map.Path()->value().getStringView(), "/xyz/../\\abc");
+}
+
+// maybeNormalizePath() performs both slash unescaping and Chromium URL normalization.
+TEST_F(ConnectionManagerUtilityTest, UnescapeSlashesAndChromiumNormalization) {
+  ON_CALL(config_, shouldNormalizePath()).WillByDefault(Return(true));
+  ON_CALL(config_, pathWithEscapedSlashesAction())
+      .WillByDefault(Return(envoy::config::filter::network::http_connection_manager::v2::
+                                HttpConnectionManager::UNESCAPE_AND_FORWARD));
+  HeaderMapImpl original_headers;
+  original_headers.insertPath().value(std::string("/xyz%2f../%5Cabc"));
+
+  HeaderMapImpl header_map(static_cast<HeaderMap&>(original_headers));
+  EXPECT_EQ(ConnectionManagerUtility::NormalizePathAction::Continue,
+            ConnectionManagerUtility::maybeNormalizePath(header_map, config_));
+  // Chromium URL path normalization converts \ to /
+  EXPECT_EQ(header_map.Path()->value().getStringView(), "//abc");
+}
+
+// maybeNormalizePath() rejects request when chromium normalization fails after unescaping slashes.
+TEST_F(ConnectionManagerUtilityTest, UnescapeSlashesRedirectAndChromiumNormalizationFailure) {
+  ON_CALL(config_, shouldNormalizePath()).WillByDefault(Return(true));
+  ON_CALL(config_, pathWithEscapedSlashesAction())
+      .WillByDefault(Return(envoy::config::filter::network::http_connection_manager::v2::
+                                HttpConnectionManager::UNESCAPE_AND_REDIRECT));
+  HeaderMapImpl original_headers;
+  // %00 is an invalid sequence in URL path and causes path normalization to fail.
+  original_headers.insertPath().value(std::string("/xyz%2f../%5Cabc%00"));
+
+  HeaderMapImpl header_map(static_cast<HeaderMap&>(original_headers));
+  EXPECT_EQ(ConnectionManagerUtility::NormalizePathAction::Reject,
+            ConnectionManagerUtility::maybeNormalizePath(header_map, config_));
+}
+
+// maybeNormalizePath() performs both unescaping and merging slashes when configured.
+TEST_F(ConnectionManagerUtilityTest, UnescapeAndMergeSlashes) {
+  ON_CALL(config_, shouldMergeSlashes()).WillByDefault(Return(true));
+  ON_CALL(config_, pathWithEscapedSlashesAction())
+      .WillByDefault(Return(envoy::config::filter::network::http_connection_manager::v2::
+                                HttpConnectionManager::UNESCAPE_AND_REDIRECT));
+  HeaderMapImpl original_headers;
+  original_headers.insertPath().value(std::string("/xyz%2f/..//abc%5C%5c"));
+
+  HeaderMapImpl header_map(static_cast<HeaderMap&>(original_headers));
+  EXPECT_EQ(ConnectionManagerUtility::NormalizePathAction::Redirect,
+            ConnectionManagerUtility::maybeNormalizePath(header_map, config_));
+  // Envoy does not merge back slashes
+  EXPECT_EQ(header_map.Path()->value().getStringView(), "/xyz/../abc\\\\");
+}
+
+// maybeNormalizePath() performs all path transformations.
+TEST_F(ConnectionManagerUtilityTest, AllNormalizations) {
+  ON_CALL(config_, shouldNormalizePath()).WillByDefault(Return(true));
+  ON_CALL(config_, shouldMergeSlashes()).WillByDefault(Return(true));
+  ON_CALL(config_, pathWithEscapedSlashesAction())
+      .WillByDefault(Return(envoy::config::filter::network::http_connection_manager::v2::
+                                HttpConnectionManager::UNESCAPE_AND_FORWARD));
+  HeaderMapImpl original_headers;
+  original_headers.insertPath().value(std::string("/xyz%2f..%5c/%2Fabc"));
+
+  HeaderMapImpl header_map(static_cast<HeaderMap&>(original_headers));
+  EXPECT_EQ(ConnectionManagerUtility::NormalizePathAction::Continue,
+            ConnectionManagerUtility::maybeNormalizePath(header_map, config_));
+  EXPECT_EQ(header_map.Path()->value().getStringView(), "/abc");
+}
+
+// maybeNormalizePath() redirects because of escaped slashes after all other transformations.
+TEST_F(ConnectionManagerUtilityTest, RedirectAfterAllOtherNormalizations) {
+  ON_CALL(config_, shouldNormalizePath()).WillByDefault(Return(true));
+  ON_CALL(config_, shouldMergeSlashes()).WillByDefault(Return(true));
+  ON_CALL(config_, pathWithEscapedSlashesAction())
+      .WillByDefault(Return(envoy::config::filter::network::http_connection_manager::v2::
+                                HttpConnectionManager::UNESCAPE_AND_REDIRECT));
+  HeaderMapImpl original_headers;
+  original_headers.insertPath().value(std::string("/xyz%2f..%5c/%2Fabc"));
+
+  HeaderMapImpl header_map(static_cast<HeaderMap&>(original_headers));
+  EXPECT_EQ(ConnectionManagerUtility::NormalizePathAction::Redirect,
+            ConnectionManagerUtility::maybeNormalizePath(header_map, config_));
+  EXPECT_EQ(header_map.Path()->value().getStringView(), "/abc");
 }
 
 // test preserve_external_request_id true does not reset the passed requestId if passed

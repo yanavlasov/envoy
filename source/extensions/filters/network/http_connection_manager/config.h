@@ -152,6 +152,11 @@ public:
     return headers_with_underscores_action_;
   }
   std::chrono::milliseconds delayedCloseTimeout() const override { return delayed_close_timeout_; }
+  envoy::config::filter::network::http_connection_manager::v2::HttpConnectionManager::
+      PathWithEscapedSlashesAction
+      pathWithEscapedSlashesAction() const override {
+    return path_with_escaped_slashes_action_;
+  }
 
 private:
   enum class CodecType { HTTP1, HTTP2, HTTP3, AUTO };
@@ -207,6 +212,8 @@ private:
   static const uint64_t StreamIdleTimeoutMs = 5 * 60 * 1000;
   // request timeout is disabled by default
   static const uint64_t RequestTimeoutMs = 0;
+  const envoy::config::filter::network::http_connection_manager::v2::HttpConnectionManager::
+      PathWithEscapedSlashesAction path_with_escaped_slashes_action_;
 };
 
 } // namespace HttpConnectionManager

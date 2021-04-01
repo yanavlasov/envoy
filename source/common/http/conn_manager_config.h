@@ -44,12 +44,14 @@ namespace Http {
   COUNTER(downstream_rq_4xx)                                                                       \
   COUNTER(downstream_rq_5xx)                                                                       \
   COUNTER(downstream_rq_completed)                                                                 \
+  COUNTER(downstream_rq_failed_path_normalization)                                                 \
   COUNTER(downstream_rq_http1_total)                                                               \
   COUNTER(downstream_rq_http2_total)                                                               \
   COUNTER(downstream_rq_http3_total)                                                               \
   COUNTER(downstream_rq_idle_timeout)                                                              \
   COUNTER(downstream_rq_non_relative_path)                                                         \
   COUNTER(downstream_rq_overload_close)                                                            \
+  COUNTER(downstream_rq_redirected_with_normalized_path)                                           \
   COUNTER(downstream_rq_response_before_rq_complete)                                               \
   COUNTER(downstream_rq_rx_reset)                                                                  \
   COUNTER(downstream_rq_timeout)                                                                   \
@@ -396,6 +398,14 @@ public:
    */
   virtual envoy::api::v2::core::HttpProtocolOptions::HeadersWithUnderscoresAction
   headersWithUnderscoresAction() const PURE;
+
+  /**
+   * @return the action HttpConnectionManager should take when receiving client request
+   * with URI path containing %2F, %2f, %5c or %5C sequences.
+   */
+  virtual envoy::config::filter::network::http_connection_manager::v2::HttpConnectionManager::
+      PathWithEscapedSlashesAction
+      pathWithEscapedSlashesAction() const PURE;
 };
 } // namespace Http
 } // namespace Envoy

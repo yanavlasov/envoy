@@ -257,6 +257,29 @@ public:
     EXPECT_CALL(filter_callbacks_.connection_.dispatcher_, deferredDelete_(_));
   }
 
+  void testPathNormalization(const HeaderMap& request_headers, const HeaderMap& expected_response) {
+    InSequence s;
+    setup(false, "");
+
+    EXPECT_CALL(*codec_, dispatch(_)).WillOnce(Invoke([&](Buffer::Instance& data) -> void {
+      StreamDecoder* decoder = &conn_manager_->newStream(response_encoder_);
+      HeaderMapPtr headers{std::make_unique<TestHeaderMapImpl>(request_headers)};
+      decoder->decodeHeaders(std::move(headers), true);
+      data.drain(4);
+    }));
+
+    EXPECT_CALL(response_encoder_, encodeHeaders(_, true))
+        .WillOnce(Invoke([&](const HeaderMap& headers, bool) -> void {
+          TestHeaderMapImpl copy{headers};
+          copy.remove(Envoy::Http::LowerCaseString{"date"});
+          copy.remove(Envoy::Http::LowerCaseString{"server"});
+          EXPECT_THAT(&copy, HeaderMapEqualIgnoreOrder(&expected_response));
+        }));
+
+    Buffer::OwnedImpl fake_input("1234");
+    conn_manager_->onData(fake_input, false);
+  }
+
   // Http::ConnectionManagerConfig
   const std::list<AccessLog::InstanceSharedPtr>& accessLogs() override { return access_logs_; }
   ServerConnectionPtr createCodec(Network::Connection&, const Buffer::Instance&,
@@ -320,6 +343,11 @@ public:
   headersWithUnderscoresAction() const override {
     return headers_with_underscores_action_;
   }
+  envoy::config::filter::network::http_connection_manager::v2::HttpConnectionManager::
+      PathWithEscapedSlashesAction
+      pathWithEscapedSlashesAction() const override {
+    return path_with_escaped_slashes_action_;
+  }
 
   DangerousDeprecatedTestTime test_time_;
   NiceMock<Router::MockRouteConfigProvider> route_config_provider_;
@@ -378,6 +406,10 @@ public:
       headers_with_underscores_action_ = envoy::api::v2::core::HttpProtocolOptions::ALLOW;
   NiceMock<Network::MockClientConnection> upstream_conn_; // for websocket tests
   NiceMock<Tcp::ConnectionPool::MockInstance> conn_pool_; // for websocket tests
+  envoy::config::filter::network::http_connection_manager::v2::HttpConnectionManager::
+      PathWithEscapedSlashesAction path_with_escaped_slashes_action_{
+          envoy::config::filter::network::http_connection_manager::v2::HttpConnectionManager::
+              KEEP_UNCHANGED};
 
   // TODO(mattklein123): Not all tests have been converted over to better setup. Convert the rest.
   MockStreamEncoder response_encoder_;
@@ -785,6 +817,99 @@ TEST_F(HttpConnectionManagerImplTest, RouteShouldUseSantizedPath) {
   // Kick off the incoming data.
   Buffer::OwnedImpl fake_input("1234");
   conn_manager_->onData(fake_input, false);
+}
+
+// Paths with escaped slashes rejected with 400 when configured.
+TEST_F(HttpConnectionManagerImplTest, PathWithEscapedSlashesRejected) {
+  path_with_escaped_slashes_action_ = envoy::config::filter::network::http_connection_manager::v2::
+      HttpConnectionManager::REJECT_REQUEST;
+  testPathNormalization(
+      TestHeaderMapImpl{{":authority", "host"}, {":path", "/abc%5c../"}, {":method", "GET"}},
+      TestHeaderMapImpl{{":status", "400"}});
+  EXPECT_EQ(1U, stats_.named_.downstream_rq_failed_path_normalization_.value());
+}
+
+// Paths with escaped slashes redirected when configured.
+TEST_F(HttpConnectionManagerImplTest, PathWithEscapedSlashesRedirected) {
+  path_with_escaped_slashes_action_ = envoy::config::filter::network::http_connection_manager::v2::
+      HttpConnectionManager::UNESCAPE_AND_REDIRECT;
+  testPathNormalization(
+      TestHeaderMapImpl{{":authority", "host"}, {":path", "/abc%2f../"}, {":method", "GET"}},
+      TestHeaderMapImpl{{":status", "307"}, {"location", "/abc/../"}});
+  EXPECT_EQ(1U, stats_.named_.downstream_rq_redirected_with_normalized_path_.value());
+}
+
+// Paths with escaped slashes rejected with 400 instead of redirected for gRPC request.
+TEST_F(HttpConnectionManagerImplTest, PathWithEscapedSlashesRejectedIfGRPC) {
+  // This test is slightly weird as it sends gRPC "request" over H/1 client of the
+  // HttpConnectionManagerImplTest. However it is sufficient to test the behavior of path
+  // normalization as it is determined by the content type only.
+  path_with_escaped_slashes_action_ = envoy::config::filter::network::http_connection_manager::v2::
+      HttpConnectionManager::UNESCAPE_AND_REDIRECT;
+  testPathNormalization(TestHeaderMapImpl{{":authority", "host"},
+                                          {":path", "/abc%2fdef"},
+                                          {":method", "GET"},
+                                          {"content-type", "application/grpc"}},
+                        TestHeaderMapImpl{{":status", "200"},
+                                          {"grpc-status", "13"},
+                                          {"content-type", "application/grpc"}});
+  EXPECT_EQ(1U, stats_.named_.downstream_rq_failed_path_normalization_.value());
+}
+
+// Test that requests with escaped slashes are redirected when configured. Redirection
+// occurs after Chromium URL normalization or merge slashes operations.
+TEST_F(HttpConnectionManagerImplTest, EscapedSlashesRedirectedAfterOtherNormalizations) {
+  normalize_path_ = true;
+  merge_slashes_ = true;
+  path_with_escaped_slashes_action_ = envoy::config::filter::network::http_connection_manager::v2::
+      HttpConnectionManager::UNESCAPE_AND_REDIRECT;
+  // Both Chromium URL normalization and merge slashes should happen if request is redirected
+  // due to escaped slash sequences.
+  testPathNormalization(TestHeaderMapImpl{{":authority", "host"},
+                                          {":path", "/abc%2f../%5cdef//"},
+                                          {":method", "GET"}},
+                        TestHeaderMapImpl{{":status", "307"}, {"location", "/def/"}});
+  EXPECT_EQ(1U, stats_.named_.downstream_rq_redirected_with_normalized_path_.value());
+}
+
+TEST_F(HttpConnectionManagerImplTest, AllNormalizationsWithEscapedSlashesForwarded) {
+  setup(false, "");
+  // Enable path sanitizer
+  normalize_path_ = true;
+  merge_slashes_ = true;
+  path_with_escaped_slashes_action_ = envoy::config::filter::network::http_connection_manager::v2::
+      HttpConnectionManager::UNESCAPE_AND_FORWARD;
+  const std::string original_path = "/x/%2E%2e/z%2f%2Fabc%5C../def";
+  const std::string normalized_path = "/z/def";
+
+  auto* filter = new MockStreamFilter();
+
+  EXPECT_CALL(filter_factory_, createFilterChain(_))
+      .WillOnce(Invoke([&](FilterChainFactoryCallbacks& callbacks) -> void {
+        callbacks.addStreamDecoderFilter(StreamDecoderFilterSharedPtr{filter});
+      }));
+
+  EXPECT_CALL(*filter, decodeHeaders(_, true))
+      .WillRepeatedly(Invoke([&](HeaderMap& header_map, bool) -> FilterHeadersStatus {
+        EXPECT_EQ(normalized_path, header_map.Path()->value().getStringView());
+        return FilterHeadersStatus::StopIteration;
+      }));
+
+  EXPECT_CALL(*filter, setDecoderFilterCallbacks(_));
+
+  EXPECT_CALL(*codec_, dispatch(_)).WillOnce(Invoke([&](Buffer::Instance&) -> void {
+    StreamDecoder* decoder = &conn_manager_->newStream(response_encoder_);
+    HeaderMapPtr headers{new TestHeaderMapImpl{
+        {":authority", "host"}, {":path", original_path}, {":method", "GET"}}};
+    decoder->decodeHeaders(std::move(headers), true);
+  }));
+
+  // Kick off the incoming data.
+  Buffer::OwnedImpl fake_input("1234");
+  conn_manager_->onData(fake_input, false);
+
+  EXPECT_CALL(*filter, onDestroy());
+  filter_callbacks_.connection_.raiseEvent(Network::ConnectionEvent::RemoteClose);
 }
 
 TEST_F(HttpConnectionManagerImplTest, StartAndFinishSpanNormalFlow) {

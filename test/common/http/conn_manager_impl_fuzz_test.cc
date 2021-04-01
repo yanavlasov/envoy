@@ -134,6 +134,12 @@ public:
   headersWithUnderscoresAction() const override {
     return envoy::api::v2::core::HttpProtocolOptions::ALLOW;
   }
+  envoy::config::filter::network::http_connection_manager::v2::HttpConnectionManager::
+      PathWithEscapedSlashesAction
+      pathWithEscapedSlashesAction() const override {
+    return envoy::config::filter::network::http_connection_manager::v2::HttpConnectionManager::
+        KEEP_UNCHANGED;
+  }
 
   const envoy::config::filter::network::http_connection_manager::v2::HttpConnectionManager config_;
   std::list<AccessLog::InstanceSharedPtr> access_logs_;

@@ -16,7 +16,19 @@ public:
   // If it is successful, the param will be updated with the normalized path.
   static bool canonicalPath(HeaderEntry& path_header);
   // Merges two or more adjacent slashes in path part of URI into one.
-  static void mergeSlashes(HeaderEntry& path_header);
+  static void mergeSlashes(HeaderEntry& headers);
+
+  enum class UnescapeSlashesResult {
+    // No escaped slash sequences were found and URL path has not been modified.
+    NotFound = 0,
+    // Escaped slash sequences were found and URL path has been modified.
+    FoundAndUnescaped = 1,
+  };
+  // Unescape %2F, %2f, %5C and %5c sequences.
+  // Requires the Path header be present.
+  // Returns the result of unescaping slashes.
+  static UnescapeSlashesResult unescapeSlashes(HeaderMap& headers);
+
   // Removes the query and/or fragment string (if present) from the input path.
   // For example, this function returns "/data" for the input path "/data#fragment?param=value".
   static absl::string_view removeQueryAndFragment(const absl::string_view path);
