@@ -23,7 +23,7 @@ if ! brew update; then
     exit 1
 fi
 
-DEPS="automake cmake coreutils go libtool wget ninja"
+DEPS="automake cmake coreutils libtool wget ninja"
 for DEP in ${DEPS}
 do
     is_installed "${DEP}" || install "${DEP}"

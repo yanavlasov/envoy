@@ -1,7 +1,7 @@
 // NOLINT(namespace-envoy)
 constexpr char TEST_SAN_ONLY_DNS_CERT_HASH[] =
-    "5c9069ccc9f127c4eaa4678fe230d6d5c0b5e65a22d31ff3d15177590b1f3cd8";
-constexpr char TEST_SAN_ONLY_DNS_CERT_SPKI[] = "D/5TEdqaOeNXddOK9rpecHD/iskyrCfr3uQlLW0fSis=";
-constexpr char TEST_SAN_ONLY_DNS_CERT_SERIAL[] = "b8b5ecc898f2124d";
-constexpr char TEST_SAN_ONLY_DNS_CERT_NOT_BEFORE[] = "Dec 18 01:50:34 2018 GMT";
-constexpr char TEST_SAN_ONLY_DNS_CERT_NOT_AFTER[] = "Dec 17 01:50:34 2020 GMT";
+    "2381dbd1d70eccc8b3cb98f8848724f8adac222445d42bb9dd5dd6cc8f17ebb7";
+constexpr char TEST_SAN_ONLY_DNS_CERT_SPKI[] = "9g7AT61lKheTbZoPRAYS0BeawAoI1gYkNRtB3/fIOnY=";
+constexpr char TEST_SAN_ONLY_DNS_CERT_SERIAL[] = "7759d03d22be0ff507897e1acb14f1c13fb584d0";
+constexpr char TEST_SAN_ONLY_DNS_CERT_NOT_BEFORE[] = "Mar 31 17:37:45 2021 GMT";
+constexpr char TEST_SAN_ONLY_DNS_CERT_NOT_AFTER[] = "Mar 31 17:37:45 2023 GMT";
