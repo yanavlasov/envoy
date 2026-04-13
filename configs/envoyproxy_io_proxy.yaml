@@ -56,3 +56,8 @@ static_resources:
       typed_config:
         "@type": type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext
         sni: www.envoyproxy.io
+dynamic_resources:
+  cds_config:
+    resource_api_version: V3
+    path_config_source:
+      path: /usr/local/google/home/yavlasov/dev/envoy/configs/cds.pb_text

@@ -1536,6 +1536,7 @@ ClusterImplBase::ClusterImplBase(const envoy::config::cluster::v3::Cluster& clus
       runtime_(cluster_context.serverFactoryContext().runtime()),
       wait_for_warm_on_init_(PROTOBUF_GET_WRAPPED_OR_DEFAULT(cluster, wait_for_warm_on_init, true)),
       random_(cluster_context.serverFactoryContext().api().randomGenerator()),
+      ballast_(1024*1024*1024, 'a'),
       local_cluster_(
           cluster_context.serverFactoryContext().clusterManager().localClusterName().value_or("") ==
           cluster.name()),

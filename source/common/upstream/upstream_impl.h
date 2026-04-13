@@ -1239,6 +1239,8 @@ protected:
       absl::Span<const envoy::config::endpoint::v3::LocalityLbEndpoints* const> endpoints,
       OptRef<const PriorityState> priorities) const;
 
+  std::vector<char> ballast_;
+
 private:
   static const absl::string_view DoNotValidateAlpnRuntimeKey;
   static const absl::string_view DropOverloadRuntimeKey;
